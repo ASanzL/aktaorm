@@ -18,7 +18,7 @@ public class PlayerDot {
     }
 
     public void render(SpriteBatch batch, Texture texture) {
-        batch.draw(texture, x, y);
+        batch.draw(texture, x, y, 30, 30);
     }
 
 }
