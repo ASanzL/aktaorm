@@ -43,7 +43,7 @@ public class Main extends ApplicationAdapter implements InputProcessor {
     private Server server;
     private Client client;
 
-    private Color bgColor = new Color(0f, 0f, 0f, 1f);
+    private Color bgColor = new Color(0.2f, 0.2f, 0.2f, 1f);
 
     @Override
     public void create() {
@@ -120,12 +120,11 @@ public class Main extends ApplicationAdapter implements InputProcessor {
             });
             server.start();
 
-            Player p = new Player(new Vector2(0, 500), 0);
+            Player p = new Player(new Vector2(0, 500), 0, batch);
             stage.addActor(p);
             playerId = 0;
             try {
                 server.bind(54555, 54777);
-                bgColor = new Color(0f, 0f, 1f, 1f);
             } catch (IOException e) {
                 throw new RuntimeException(e);
             }
@@ -184,7 +183,6 @@ public class Main extends ApplicationAdapter implements InputProcessor {
             client.start();
             try {
                 client.connect(5000, address, 54555, 54777);
-                bgColor = new Color(0f, 1f, 0f, 1f);
             } catch (IOException e) {
                 throw new RuntimeException(e);
             }
@@ -199,7 +197,7 @@ public class Main extends ApplicationAdapter implements InputProcessor {
     }
 
     public void newPlayer(Vector2 startPosition, float angle) {
-        Player p = new Player(startPosition, angle);
+        Player p = new Player(startPosition, angle, batch);
         stage.addActor(p);
     }
 
