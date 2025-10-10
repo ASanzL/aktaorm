@@ -132,7 +132,6 @@ public class Main extends ApplicationAdapter implements InputProcessor {
             client.addListener(new Listener() {
                 @Override
                 public void received(Connection connection, Object object) {
-                    Gdx.app.log("new msg", object.toString());
                     // New player message
                     if (object instanceof NetNewPlayer) {
                         NetNewPlayer response = (NetNewPlayer) object;
@@ -146,7 +145,6 @@ public class Main extends ApplicationAdapter implements InputProcessor {
 
                     // Set player id message
                     if (object instanceof NetSetPlayerId) {
-                        Gdx.app.log("", "New player id");
                         NetSetPlayerId response = (NetSetPlayerId) object;
                         Timer.schedule(new Timer.Task() {
                             @Override
@@ -161,8 +159,13 @@ public class Main extends ApplicationAdapter implements InputProcessor {
                         NetTurn response = (NetTurn) object;
                         if (response.playerId != playerId) {
                             getPlayer(response.playerId).angle = response.realAngle;
-                            getPlayer(response.playerId).position.x = response.realX;
-                            getPlayer(response.playerId).position.y = response.realY;
+
+                            // Ignore if distance is too big
+                            if (Math.abs(getPlayer(response.playerId).position.x - response.realY) < 10 &&
+                                Math.abs(getPlayer(response.playerId).position.y - response.realY) < 10) {
+                                getPlayer(response.playerId).position.x = response.realX;
+                                getPlayer(response.playerId).position.y = response.realY;
+                            }
 
                             if (response.direction.equals("left")) {
                                 getPlayer(response.playerId).turnLeft();
