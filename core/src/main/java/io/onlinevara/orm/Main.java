@@ -221,6 +221,29 @@ public class Main extends ApplicationAdapter implements InputProcessor {
         stage.draw();
     }
 
+    public void turnPlayer(String direction) {
+        Player player = (Player)stage.getActors().get(playerId);
+        if (direction.equals("left")) {
+            player.turnLeft();
+        } else {
+            player.turnRight();
+        }
+
+        NetTurn turnMsg = new NetTurn();
+        turnMsg.playerId = playerId;
+        turnMsg.realAngle = getPlayer().angle;
+        turnMsg.direction = direction;
+
+        if (isServer) {
+            turnMsg.realX = getPlayer().position.x;
+            turnMsg.realY = getPlayer().position.y;
+
+            server.sendToAllTCP(turnMsg);
+        } else {
+            client.sendTCP(turnMsg);
+        }
+    }
+
     @Override
     public void resize(int width, int height) {
         stage.getViewport().update(width, height, true);
@@ -233,6 +256,15 @@ public class Main extends ApplicationAdapter implements InputProcessor {
 
     @Override
     public boolean keyUp(int keycode) {
+        // Gdx.input.isKeyPressed(Input.Keys.LEFT)
+        if (keycode == Input.Keys.LEFT) {
+            turnPlayer("left");
+            return true;
+        }
+        if (keycode == Input.Keys.RIGHT) {
+            turnPlayer("right");
+            return true;
+        }
         return false;
     }
 
@@ -243,38 +275,9 @@ public class Main extends ApplicationAdapter implements InputProcessor {
 
     @Override public boolean touchDown (int screenX, int screenY, int pointer, int button) {
         if (screenX > Gdx.graphics.getWidth() / 2) {
-            Player player = (Player)stage.getActors().get(playerId);
-            player.turnLeft();
-
-            NetTurn turnMsg = new NetTurn();
-            turnMsg.playerId = playerId;
-            turnMsg.realAngle = getPlayer().angle;
-            turnMsg.direction = "left";
-
-            if (isServer) {
-                turnMsg.realX = getPlayer().position.x;
-                turnMsg.realY = getPlayer().position.y;
-
-                server.sendToAllTCP(turnMsg);
-            } else {
-                client.sendTCP(turnMsg);
-            }
+            turnPlayer("left");
         } else {
-            Player player = (Player)stage.getActors().get(playerId);
-            player.turnRight();
-
-            NetTurn turnMsg = new NetTurn();
-            turnMsg.playerId = playerId;
-            turnMsg.realAngle = getPlayer().angle;
-            turnMsg.direction = "right";
-
-            if (isServer) {
-                turnMsg.realX = getPlayer().position.x;
-                turnMsg.realY = getPlayer().position.y;
-                server.sendToAllTCP(turnMsg);
-            } else {
-                client.sendTCP(turnMsg);
-            }
+            turnPlayer("right");
         }
 
         return false;
