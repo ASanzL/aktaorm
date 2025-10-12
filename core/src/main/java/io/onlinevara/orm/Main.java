@@ -7,9 +7,7 @@ import com.badlogic.gdx.Input;
 import com.badlogic.gdx.InputMultiplexer;
 import com.badlogic.gdx.InputProcessor;
 import com.badlogic.gdx.graphics.Color;
-import com.badlogic.gdx.graphics.g2d.BitmapFont;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
-import com.badlogic.gdx.graphics.g2d.TextureRegion;
 import com.badlogic.gdx.math.MathUtils;
 import com.badlogic.gdx.math.Vector2;
 import com.badlogic.gdx.scenes.scene2d.Actor;
@@ -17,9 +15,7 @@ import com.badlogic.gdx.scenes.scene2d.InputEvent;
 import com.badlogic.gdx.scenes.scene2d.InputListener;
 import com.badlogic.gdx.scenes.scene2d.Stage;
 import com.badlogic.gdx.scenes.scene2d.ui.Skin;
-import com.badlogic.gdx.scenes.scene2d.ui.Table;
 import com.badlogic.gdx.scenes.scene2d.ui.TextButton;
-import com.badlogic.gdx.utils.Align;
 import com.badlogic.gdx.utils.ScreenUtils;
 import com.badlogic.gdx.utils.Timer;
 import com.badlogic.gdx.utils.viewport.FitViewport;
@@ -30,6 +26,7 @@ import com.esotericsoftware.kryonet.Listener;
 import com.esotericsoftware.kryonet.Server;
 import java.io.IOException;
 import java.net.InetAddress;
+import java.util.ArrayList;
 
 /** {@link com.badlogic.gdx.ApplicationListener} implementation shared by all platforms. */
 public class Main extends ApplicationAdapter implements InputProcessor {
@@ -46,12 +43,15 @@ public class Main extends ApplicationAdapter implements InputProcessor {
     private Server server;
     private Client client;
 
-    private Color bgColor = new Color(0.2f, 0.2f, 0.2f, 1f);
+    private final Color BACKGROUND_COLOR = new Color(0.2f, 0.2f, 0.2f, 1f);
+
+    private final int VIEWPORT_WIDTH = 1920;
+    private final int VIEWPORT_HEIGHT = 1080;
 
     @Override
     public void create() {
         batch = new SpriteBatch();
-        stage = new Stage(new FitViewport(1920, 1080));
+        stage = new Stage(new FitViewport(VIEWPORT_WIDTH, VIEWPORT_HEIGHT));
         InputMultiplexer multiplexer = new InputMultiplexer();
 
         // Setup input
@@ -69,6 +69,7 @@ public class Main extends ApplicationAdapter implements InputProcessor {
         readyButton.addListener(new InputListener() {
             @Override
             public boolean touchDown(InputEvent event, float x, float y, int pointer, int button) {
+                readyButton.setVisible(false);
                 setPlayerReadyNet();
                 return true;
             }
@@ -146,7 +147,7 @@ public class Main extends ApplicationAdapter implements InputProcessor {
             });
             server.start();
 
-            Player p = new Player(new Vector2(500, 500), 0, batch, this);
+            Player p = new Player(new Vector2(500, 500), 0, batch, this, getPlayers().size());
             stage.addActor(p);
             playerId = stage.getActors().size - 1;
             try {
@@ -208,6 +209,16 @@ public class Main extends ApplicationAdapter implements InputProcessor {
                         NetSetReady response = (NetSetReady)object;
                         setPlayerReady(response.playerId);
                     }
+
+                    // Set player dead message
+                    if (object instanceof NetSetPlayerDead) {
+                        NetSetPlayerDead response = (NetSetPlayerDead)object;
+                        if (getPlayerByColorId(response.snakeColorId) != null) {
+                            getPlayerByColorId(response.snakeColorId).isDead = true;
+                            getPlayerByColorId(response.snakeColorId).getHeadPosition().x = response.finalPosition.x;
+                            getPlayerByColorId(response.snakeColorId).getHeadPosition().y = response.finalPosition.y;
+                        }
+                    }
                 }
 
                 @Override
@@ -239,7 +250,6 @@ public class Main extends ApplicationAdapter implements InputProcessor {
     }
 
     public void setPlayerReady(int playerId) {
-        readyButton.setVisible(false);
         getPlayer(playerId).ready = true;
     }
 
@@ -257,14 +267,16 @@ public class Main extends ApplicationAdapter implements InputProcessor {
     }
 
     private void registerKryoClasses(Kryo kryo) {
+        kryo.register(Vector2.class);
         kryo.register(NetNewPlayer.class);
         kryo.register(NetSetPlayerId.class);
         kryo.register(NetTurn.class);
         kryo.register(NetSetReady.class);
+        kryo.register(NetSetPlayerDead.class);
     }
 
     public void newPlayer(Vector2 startPosition, float angle) {
-        Player p = new Player(startPosition, angle, batch, this);
+        Player p = new Player(startPosition, angle, batch, this, getPlayers().size());
         stage.addActor(p);
     }
 
@@ -279,10 +291,67 @@ public class Main extends ApplicationAdapter implements InputProcessor {
     @Override
     public void render() {
         float delta = Gdx.graphics.getDeltaTime();
-        ScreenUtils.clear(bgColor);
+        ScreenUtils.clear(BACKGROUND_COLOR);
+
+        if (isServer && gameStarted()) {
+            handleCollision();
+        }
 
         stage.act(delta);
         stage.draw();
+    }
+
+    /**
+     * Handle any collision for a player
+     */
+    public void handleCollision() {
+        Player collidedPlayer = checkForCollision();
+        if (collidedPlayer != null) {
+            collidedPlayer.isDead = true;
+            NetSetPlayerDead netSetPlayerDeadMessage = new NetSetPlayerDead();
+            netSetPlayerDeadMessage.snakeColorId = collidedPlayer.snakeColorId;
+            netSetPlayerDeadMessage.finalPosition = collidedPlayer.getHeadPosition();
+            server.sendToAllTCP(netSetPlayerDeadMessage);
+        }
+    }
+
+    /**
+     * Checks for the player id of if any new collisions
+     * @return the player who has collided
+     */
+    public Player checkForCollision() {
+        // Check all players against all other players collision points
+        for (Player playerToCheck:
+            getPlayers()) {
+            if (playerToCheck.getX() < 0 || playerToCheck.getX() > VIEWPORT_WIDTH ||
+                playerToCheck.getY() < 0 || playerToCheck.getY() > VIEWPORT_HEIGHT) {
+                return playerToCheck;
+            }
+            for (Player player:
+                getPlayers()) {
+                // No need to check a player who already has collided
+                if (playerToCheck.isDead) {
+                    break;
+                }
+                for (int i = 0; i < player.collisionPoints.size; i++) {
+                    /* If a player is checking against it self -
+                     dont check the last 8 points - so the player dont immediately collided with itself */
+                    if (playerToCheck == player && i > player.collisionPoints.size - 8) {
+                        break;
+                    }
+                    /* If distance between the players head and a collision point is less then the width of a snake
+                     it has collided */
+                    if (Vector2.dst(playerToCheck.getHeadPosition().x,
+                        playerToCheck.getHeadPosition().y,
+                        player.collisionPoints.get(i).x,
+                        player.collisionPoints.get(i).y)
+                        < playerToCheck.snakeSize) {
+                        return playerToCheck;
+                    }
+                }
+            }
+        }
+        return null;
     }
 
     public void turnPlayer(String direction) {
@@ -308,6 +377,27 @@ public class Main extends ApplicationAdapter implements InputProcessor {
         }
     }
 
+    public Player getPlayerByColorId(int colorId) {
+        for (Player p :
+            getPlayers()) {
+            if (p.snakeColorId == colorId) {
+                return p;
+            }
+        }
+        return null;
+    }
+
+    public ArrayList<Player> getPlayers() {
+        ArrayList<Player> players = new ArrayList<>();
+        for (Actor a :
+            stage.getActors()) {
+            if (a instanceof Player) {
+                players.add((Player)a);
+            }
+        }
+        return players;
+    }
+
     @Override
     public void resize(int width, int height) {
         stage.getViewport().update(width, height, true);
@@ -324,6 +414,7 @@ public class Main extends ApplicationAdapter implements InputProcessor {
             return true;
         }
         if (keycode == Input.Keys.CENTER) {
+            readyButton.setVisible(false);
             setPlayerReadyNet();
         }
         return false;
