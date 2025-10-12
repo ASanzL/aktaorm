@@ -1,12 +1,12 @@
 package io.onlinevara.orm;
 
+import com.badlogic.gdx.ApplicationAdapter;
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.g2d.Batch;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.g2d.TextureRegion;
-import com.badlogic.gdx.math.DelaunayTriangulator;
 import com.badlogic.gdx.math.MathUtils;
 import com.badlogic.gdx.math.Vector2;
 import com.badlogic.gdx.scenes.scene2d.Actor;
@@ -16,8 +16,8 @@ import space.earlygrey.shapedrawer.JoinType;
 import space.earlygrey.shapedrawer.ShapeDrawer;
 
 public class Player extends Actor {
-    ShapeDrawer shapeDrawer;
-    Vector2 position;
+    ShapeDrawer shapeDrawerBody;
+    ShapeDrawer shapeDrawerHead;
     float angle;
     private final float turnSpeed = 160f;
     private final float movementSpeed = 130f;
@@ -31,8 +31,11 @@ public class Player extends Actor {
     Array<Color> snakeColors = new Array<>();
     int snakeColorId = 0;
 
-    public Player(Vector2 position, float angle, SpriteBatch batch) {
-        this.position = position;
+    boolean ready = false;
+    Main main;
+
+    public Player(Vector2 position, float angle, SpriteBatch batch, Main main) {
+        setPosition(position.x, position.y);
         playerTexture = new TextureRegion(new Texture(Gdx.files.internal("snake-head.png")));
 
         this.angle = angle;
@@ -48,6 +51,8 @@ public class Player extends Actor {
         snakeColors.add(Color.WHITE);
 
         snakeColorId = MathUtils.random(snakeColors.size - 1);
+
+        this.main = main;
     }
 
     public void turnLeft() {
@@ -66,11 +71,18 @@ public class Player extends Actor {
 
     private void addSnakePart()
     {
-        snakePath.add(new Vector2(position.x, position.y));
+        snakePath.add(new Vector2(getX(), getY()));
+    }
+
+    private Vector2 getHeadPosition() {
+        return snakePath.get(snakePath.size - 1);
     }
 
     @Override
     public void act(float delta) {
+        if (!main.gameStarted()) {
+            return;
+        }
         // Update rotation based and add snake parts
         if (turnRight) {
             angle += turnSpeed * delta;
@@ -82,21 +94,24 @@ public class Player extends Actor {
         }
 
         // Move actor
-        position.x += movementSpeed * MathUtils.cosDeg(angle) * delta;
-        position.y += movementSpeed * MathUtils.sinDeg(angle) * delta;
+        moveBy(
+            movementSpeed * MathUtils.cosDeg(angle) * delta,
+            movementSpeed * MathUtils.sinDeg(angle) * delta
+        );
 
         // Set last point to head
-        snakePath.get(snakePath.size - 1).x = position.x;
-        snakePath.get(snakePath.size - 1).y = position.y;
+        getHeadPosition().x = getX();
+        getHeadPosition().y = getY();
     }
 
     @Override
     public void draw(Batch batch, float parentAlpha) {
-        shapeDrawer = new ShapeDrawer(batch, new TextureRegion(new Texture(Gdx.files.internal("snake-part.png"))));
+        shapeDrawerBody = new ShapeDrawer(batch, new TextureRegion(new Texture(Gdx.files.internal("snake-part.png"))));
+        shapeDrawerHead = new ShapeDrawer(batch, new TextureRegion(new Texture(Gdx.files.internal("snake-part.png"))));
 
-//        batch.draw(playerTexture, position.x, position.y, 32, 32, 64, 64, 1f, 1f, angle);
-
-        shapeDrawer.setColor(snakeColors.get(snakeColorId));
-        shapeDrawer.path(snakePath, 16, JoinType.SMOOTH, true);
+        shapeDrawerBody.setColor(snakeColors.get(snakeColorId));
+        shapeDrawerHead.setColor(Color.WHITE);
+        shapeDrawerBody.path(snakePath, 16, JoinType.SMOOTH, true);
+        shapeDrawerHead.filledCircle(getHeadPosition().x, getHeadPosition().y, 8);
     }
 }

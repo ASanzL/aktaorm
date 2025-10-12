@@ -4,30 +4,30 @@ import com.badlogic.gdx.ApplicationAdapter;
 
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.Input;
+import com.badlogic.gdx.InputMultiplexer;
 import com.badlogic.gdx.InputProcessor;
-import com.badlogic.gdx.graphics.Camera;
 import com.badlogic.gdx.graphics.Color;
-import com.badlogic.gdx.graphics.OrthographicCamera;
-import com.badlogic.gdx.graphics.Texture;
+import com.badlogic.gdx.graphics.g2d.BitmapFont;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
+import com.badlogic.gdx.graphics.g2d.TextureRegion;
 import com.badlogic.gdx.math.MathUtils;
 import com.badlogic.gdx.math.Vector2;
 import com.badlogic.gdx.scenes.scene2d.Actor;
+import com.badlogic.gdx.scenes.scene2d.InputEvent;
+import com.badlogic.gdx.scenes.scene2d.InputListener;
 import com.badlogic.gdx.scenes.scene2d.Stage;
-import com.badlogic.gdx.utils.Array;
-
+import com.badlogic.gdx.scenes.scene2d.ui.Skin;
+import com.badlogic.gdx.scenes.scene2d.ui.Table;
+import com.badlogic.gdx.scenes.scene2d.ui.TextButton;
+import com.badlogic.gdx.utils.Align;
 import com.badlogic.gdx.utils.ScreenUtils;
 import com.badlogic.gdx.utils.Timer;
 import com.badlogic.gdx.utils.viewport.FitViewport;
-import com.badlogic.gdx.utils.viewport.Viewport;
 import com.esotericsoftware.kryo.Kryo;
 import com.esotericsoftware.kryonet.Client;
 import com.esotericsoftware.kryonet.Connection;
-import com.esotericsoftware.kryonet.EndPoint;
 import com.esotericsoftware.kryonet.Listener;
 import com.esotericsoftware.kryonet.Server;
-//import com.esotericsoftware.kryonet.Server;
-
 import java.io.IOException;
 import java.net.InetAddress;
 
@@ -35,6 +35,9 @@ import java.net.InetAddress;
 public class Main extends ApplicationAdapter implements InputProcessor {
     private SpriteBatch batch;
     private Stage stage;
+
+    Skin uiSkin;
+    TextButton readyButton;
 
     private boolean isServer = false;
 
@@ -49,8 +52,27 @@ public class Main extends ApplicationAdapter implements InputProcessor {
     public void create() {
         batch = new SpriteBatch();
         stage = new Stage(new FitViewport(1920, 1080));
-        Gdx.input.setInputProcessor(this);
+        InputMultiplexer multiplexer = new InputMultiplexer();
 
+        // Setup input
+        multiplexer.addProcessor(stage);
+        multiplexer.addProcessor(this);
+        Gdx.input.setInputProcessor(multiplexer);
+
+        // Setup UI
+        uiSkin = new Skin(Gdx.files.internal("ui/uiskin.json"));
+        readyButton = new TextButton("Ready", uiSkin);
+        readyButton.setSize(500, 200);
+        readyButton.setPosition(50,100);
+        readyButton.getLabel().setFontScale(5);
+        stage.addActor(readyButton);
+        readyButton.addListener(new InputListener() {
+            @Override
+            public boolean touchDown(InputEvent event, float x, float y, int pointer, int button) {
+                setPlayerReadyNet();
+                return true;
+            }
+        });
 
         // Initiate server or client
         client = new Client();
@@ -69,23 +91,20 @@ public class Main extends ApplicationAdapter implements InputProcessor {
             // Handle server traffic
             server.addListener(new Listener() {
                 @Override
-                public void connected(Connection connection) {
-
-                }
-
-                @Override
                 public void received(Connection connection, Object object) {
                     if (object.toString().equals("JOINED")) {
                         // Send all player actors to joining player
                         for (Actor a:stage.getActors()
                              ) {
-                            Player player = (Player)a;
+                            if (a instanceof Player) {
+                                Player player = (Player)a;
 
-                            NetNewPlayer newPlayerMessage = new NetNewPlayer();
-                            newPlayerMessage.x = player.position.x;
-                            newPlayerMessage.y = player.position.y;
-                            newPlayerMessage.angle = player.angle;
-                            server.sendToTCP(connection.getID(), newPlayerMessage);
+                                NetNewPlayer newPlayerMessage = new NetNewPlayer();
+                                newPlayerMessage.x = player.getX();
+                                newPlayerMessage.y = player.getY();
+                                newPlayerMessage.angle = player.angle;
+                                server.sendToTCP(connection.getID(), newPlayerMessage);
+                            }
                         }
 
                         // Add joining player
@@ -97,7 +116,7 @@ public class Main extends ApplicationAdapter implements InputProcessor {
 
                         // Set player id of new player
                         NetSetPlayerId playerIdMsg = new NetSetPlayerId();
-                        playerIdMsg.playerId = 1;
+                        playerIdMsg.playerId = stage.getActors().size - 1;
                         server.sendToTCP(connection.getID(), playerIdMsg);
                     }
                     // Handle client turn message
@@ -111,18 +130,25 @@ public class Main extends ApplicationAdapter implements InputProcessor {
                         } else {
                             getPlayer(response.playerId).stopTurning();
                         }
-                        response.realX = getPlayer(response.playerId).position.x;
-                        response.realY = getPlayer(response.playerId).position.y;
+                        response.realX = getPlayer(response.playerId).getX();
+                        response.realY = getPlayer(response.playerId).getY();
 
                         server.sendToAllTCP(response);
+                    }
+
+                    if (object instanceof NetSetReady) {
+                        NetSetReady response = (NetSetReady)object;
+
+                        server.sendToAllTCP(response);
+                        setPlayerReady(response.playerId);
                     }
                 }
             });
             server.start();
 
-            Player p = new Player(new Vector2(0, 500), 0, batch);
+            Player p = new Player(new Vector2(500, 500), 0, batch, this);
             stage.addActor(p);
-            playerId = 0;
+            playerId = stage.getActors().size - 1;
             try {
                 server.bind(54555, 54777);
             } catch (IOException e) {
@@ -161,10 +187,10 @@ public class Main extends ApplicationAdapter implements InputProcessor {
                             getPlayer(response.playerId).angle = response.realAngle;
 
                             // Ignore if distance is too big
-                            if (Math.abs(getPlayer(response.playerId).position.x - response.realY) < 10 &&
-                                Math.abs(getPlayer(response.playerId).position.y - response.realY) < 10) {
-                                getPlayer(response.playerId).position.x = response.realX;
-                                getPlayer(response.playerId).position.y = response.realY;
+                            if (Math.abs(getPlayer(response.playerId).getX() - response.realY) < 10 &&
+                                Math.abs(getPlayer(response.playerId).getY() - response.realY) < 10) {
+                                getPlayer(response.playerId).setX(response.realX);
+                                getPlayer(response.playerId).setY(response.realY);
                             }
 
                             if (response.direction.equals("left")) {
@@ -175,6 +201,12 @@ public class Main extends ApplicationAdapter implements InputProcessor {
                                 getPlayer(response.playerId).stopTurning();
                             }
                         }
+                    }
+
+                    // Set ready message
+                    if (object instanceof NetSetReady) {
+                        NetSetReady response = (NetSetReady)object;
+                        setPlayerReady(response.playerId);
                     }
                 }
 
@@ -193,14 +225,46 @@ public class Main extends ApplicationAdapter implements InputProcessor {
 
     }
 
+    public void setPlayerReadyNet() {
+        setPlayerReady(playerId);
+        if (isServer) {
+            NetSetReady setPlayerReady = new NetSetReady();
+            setPlayerReady.playerId = playerId;
+            server.sendToAllTCP(setPlayerReady);
+        } else {
+            NetSetReady setPlayerReady = new NetSetReady();
+            setPlayerReady.playerId = playerId;
+            client.sendTCP(setPlayerReady);
+        }
+    }
+
+    public void setPlayerReady(int playerId) {
+        readyButton.setVisible(false);
+        getPlayer(playerId).ready = true;
+    }
+
+    public boolean gameStarted() {
+        for (Actor a:
+             stage.getActors()) {
+            if ((a instanceof Player)) {
+                Player p = (Player) a;
+                if (!p.ready) {
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+
     private void registerKryoClasses(Kryo kryo) {
         kryo.register(NetNewPlayer.class);
         kryo.register(NetSetPlayerId.class);
         kryo.register(NetTurn.class);
+        kryo.register(NetSetReady.class);
     }
 
     public void newPlayer(Vector2 startPosition, float angle) {
-        Player p = new Player(startPosition, angle, batch);
+        Player p = new Player(startPosition, angle, batch, this);
         stage.addActor(p);
     }
 
@@ -235,8 +299,8 @@ public class Main extends ApplicationAdapter implements InputProcessor {
         turnMsg.direction = direction;
 
         if (isServer) {
-            turnMsg.realX = getPlayer().position.x;
-            turnMsg.realY = getPlayer().position.y;
+            turnMsg.realX = getPlayer().getX();
+            turnMsg.realY = getPlayer().getY();
 
             server.sendToAllTCP(turnMsg);
         } else {
@@ -251,12 +315,6 @@ public class Main extends ApplicationAdapter implements InputProcessor {
 
     @Override
     public boolean keyDown(int keycode) {
-        return false;
-    }
-
-    @Override
-    public boolean keyUp(int keycode) {
-        // Gdx.input.isKeyPressed(Input.Keys.LEFT)
         if (keycode == Input.Keys.LEFT) {
             turnPlayer("left");
             return true;
@@ -265,6 +323,14 @@ public class Main extends ApplicationAdapter implements InputProcessor {
             turnPlayer("right");
             return true;
         }
+        if (keycode == Input.Keys.CENTER) {
+            setPlayerReadyNet();
+        }
+        return false;
+    }
+
+    @Override
+    public boolean keyUp(int keycode) {
         return false;
     }
 
@@ -272,6 +338,7 @@ public class Main extends ApplicationAdapter implements InputProcessor {
     public boolean keyTyped(char character) {
         return false;
     }
+
 
     @Override public boolean touchDown (int screenX, int screenY, int pointer, int button) {
         if (screenX > Gdx.graphics.getWidth() / 2) {
@@ -294,8 +361,8 @@ public class Main extends ApplicationAdapter implements InputProcessor {
         turnMsg.direction = "stop";
 
         if (isServer) {
-            turnMsg.realX = getPlayer(turnMsg.playerId).position.x;
-            turnMsg.realY = getPlayer(turnMsg.playerId).position.y;
+            turnMsg.realX = getPlayer(turnMsg.playerId).getX();
+            turnMsg.realY = getPlayer(turnMsg.playerId).getY();
             server.sendToAllTCP(turnMsg);
         } else {
             client.sendTCP(turnMsg);
