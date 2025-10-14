@@ -1,12 +1,12 @@
 package io.onlinevara.orm;
 
 import com.badlogic.gdx.ApplicationAdapter;
-
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.Input;
 import com.badlogic.gdx.InputMultiplexer;
 import com.badlogic.gdx.InputProcessor;
 import com.badlogic.gdx.graphics.Color;
+import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.math.MathUtils;
 import com.badlogic.gdx.math.Vector2;
@@ -14,8 +14,10 @@ import com.badlogic.gdx.scenes.scene2d.Actor;
 import com.badlogic.gdx.scenes.scene2d.InputEvent;
 import com.badlogic.gdx.scenes.scene2d.InputListener;
 import com.badlogic.gdx.scenes.scene2d.Stage;
+import com.badlogic.gdx.scenes.scene2d.ui.Image;
 import com.badlogic.gdx.scenes.scene2d.ui.Skin;
 import com.badlogic.gdx.scenes.scene2d.ui.TextButton;
+import com.badlogic.gdx.utils.Array;
 import com.badlogic.gdx.utils.ScreenUtils;
 import com.badlogic.gdx.utils.Timer;
 import com.badlogic.gdx.utils.viewport.FitViewport;
@@ -33,8 +35,12 @@ public class Main extends ApplicationAdapter implements InputProcessor {
     private SpriteBatch batch;
     private Stage stage;
 
+    private final int snakeSize = 16;
     Skin uiSkin;
     TextButton readyButton;
+    int readyButtonStageId = -1;
+
+    private boolean gameIsWon = false;
 
     private boolean isServer = false;
 
@@ -43,15 +49,17 @@ public class Main extends ApplicationAdapter implements InputProcessor {
     private Server server;
     private Client client;
 
-    private final Color BACKGROUND_COLOR = new Color(0.2f, 0.2f, 0.2f, 1f);
+    private final Color BACKGROUND_COLOR = Color.BLACK;
 
-    private final int VIEWPORT_WIDTH = 1920;
-    private final int VIEWPORT_HEIGHT = 1080;
+    private final static int VIEWPORT_WIDTH = 1920;
+    private final static int VIEWPORT_HEIGHT = 1080;
 
     @Override
     public void create() {
         batch = new SpriteBatch();
         stage = new Stage(new FitViewport(VIEWPORT_WIDTH, VIEWPORT_HEIGHT));
+        Texture backgroundImage = new Texture(Gdx.files.internal("background.png"));
+        stage.addActor(new Image(backgroundImage));
         InputMultiplexer multiplexer = new InputMultiplexer();
 
         // Setup input
@@ -66,6 +74,7 @@ public class Main extends ApplicationAdapter implements InputProcessor {
         readyButton.setPosition(50,100);
         readyButton.getLabel().setFontScale(5);
         stage.addActor(readyButton);
+        readyButtonStageId = stage.getActors().size - 1;
         readyButton.addListener(new InputListener() {
             @Override
             public boolean touchDown(InputEvent event, float x, float y, int pointer, int button) {
@@ -110,9 +119,11 @@ public class Main extends ApplicationAdapter implements InputProcessor {
 
                         // Add joining player
                         NetNewPlayer message = new NetNewPlayer();
-                        message.x = MathUtils.random(500, 500);
-                        message.y = MathUtils.random(900, 900);
-                        newPlayer(new Vector2(message.x, message.y), 0);
+                        Vector2 startingPosition = Player.getRandomPosition();
+                        message.x = startingPosition.x;
+                        message.y = startingPosition.y;
+                        message.angle = MathUtils.random(360);
+                        newPlayer(new Vector2(message.x, message.y), message.angle);
                         server.sendToAllTCP(message);
 
                         // Set player id of new player
@@ -147,7 +158,8 @@ public class Main extends ApplicationAdapter implements InputProcessor {
             });
             server.start();
 
-            Player p = new Player(new Vector2(500, 500), 0, batch, this, getPlayers().size());
+            // Create the servers player
+            Player p = new Player(Player.getRandomPosition(), MathUtils.random(360), batch, this, getPlayers().size(), snakeSize);
             stage.addActor(p);
             playerId = stage.getActors().size - 1;
             try {
@@ -219,6 +231,17 @@ public class Main extends ApplicationAdapter implements InputProcessor {
                             getPlayerByColorId(response.snakeColorId).getHeadPosition().y = response.finalPosition.y;
                         }
                     }
+
+                    // Reset player message
+                    if (object instanceof NetResetPlayer) {
+                        NetResetPlayer response = (NetResetPlayer)object;
+                        for (int i = 0; i <= getPlayers().size() - 1; i++) {
+                            getPlayers().get(i).setX(response.playerPositions.get(i).x);
+                            getPlayers().get(i).setY(response.playerPositions.get(i).y);
+                            getPlayers().get(i).resetPlayer();
+                        }
+                        stage.getActors().get(readyButtonStageId).setVisible(true);
+                    }
                 }
 
                 @Override
@@ -268,15 +291,19 @@ public class Main extends ApplicationAdapter implements InputProcessor {
 
     private void registerKryoClasses(Kryo kryo) {
         kryo.register(Vector2.class);
+        kryo.register(Array.class);
+        kryo.register(Object.class);
+        kryo.register(Object[].class);
         kryo.register(NetNewPlayer.class);
         kryo.register(NetSetPlayerId.class);
         kryo.register(NetTurn.class);
         kryo.register(NetSetReady.class);
         kryo.register(NetSetPlayerDead.class);
+        kryo.register(NetResetPlayer.class);
     }
 
     public void newPlayer(Vector2 startPosition, float angle) {
-        Player p = new Player(startPosition, angle, batch, this, getPlayers().size());
+        Player p = new Player(startPosition, angle, batch, this, getPlayers().size(), snakeSize);
         stage.addActor(p);
     }
 
@@ -293,8 +320,17 @@ public class Main extends ApplicationAdapter implements InputProcessor {
         float delta = Gdx.graphics.getDeltaTime();
         ScreenUtils.clear(BACKGROUND_COLOR);
 
-        if (isServer && gameStarted()) {
+        if (isServer && gameStarted() && !checkForWin()) {
             handleCollision();
+        } else if (isServer && checkForWin() && !gameIsWon) {
+            gameIsWon = true;
+            Timer.schedule(new Timer.Task() {
+                @Override
+                public void run() {
+                    handleWin();
+                    gameIsWon = false;
+                }
+            }, 5);
         }
 
         stage.act(delta);
@@ -323,8 +359,8 @@ public class Main extends ApplicationAdapter implements InputProcessor {
         // Check all players against all other players collision points
         for (Player playerToCheck:
             getPlayers()) {
-            if (playerToCheck.getX() < 0 || playerToCheck.getX() > VIEWPORT_WIDTH ||
-                playerToCheck.getY() < 0 || playerToCheck.getY() > VIEWPORT_HEIGHT) {
+            if (playerToCheck.getX() < (float) snakeSize / 2 || playerToCheck.getX() > VIEWPORT_WIDTH - (float) snakeSize / 2 ||
+                playerToCheck.getY() < (float) snakeSize / 2 || playerToCheck.getY() > VIEWPORT_HEIGHT - (float) snakeSize / 2) {
                 return playerToCheck;
             }
             for (Player player:
@@ -335,7 +371,7 @@ public class Main extends ApplicationAdapter implements InputProcessor {
                 }
                 for (int i = 0; i < player.collisionPoints.size; i++) {
                     /* If a player is checking against it self -
-                     dont check the last 8 points - so the player dont immediately collided with itself */
+                     dont check the last few points - so the player dont immediately collided with itself */
                     if (playerToCheck == player && i > player.collisionPoints.size - 8) {
                         break;
                     }
@@ -352,6 +388,42 @@ public class Main extends ApplicationAdapter implements InputProcessor {
             }
         }
         return null;
+    }
+
+    public boolean checkForWin() {
+        int numberOfDeaths = 0;
+        ArrayList<Player> players = getPlayers();
+        for (Player p :
+            players) {
+            if (p.isDead) {
+                numberOfDeaths++;
+            }
+        }
+        // If one player, end game when they die. If more players end when only one player remaining
+        if (players.size() == 1 && numberOfDeaths == 1) {
+            return true;
+        } else if (players.size() > 1 ) {
+            return numberOfDeaths >= players.size() - 1;
+        }
+        return false;
+    }
+
+    public void handleWin() {
+        Array<Vector2> newPlayerPositions = new Array<>();
+        for (Player p :
+            getPlayers()) {
+            Vector2 newPosition = Player.getRandomPosition();
+            newPlayerPositions.add(newPosition);
+            p.setX(newPosition.x);
+            p.setY(newPosition.y);
+            p.resetPlayer();
+        }
+
+        stage.getActors().get(readyButtonStageId).setVisible(true);
+
+        NetResetPlayer netResetPlayerMessage = new NetResetPlayer();
+        netResetPlayerMessage.playerPositions = newPlayerPositions;
+        server.sendToAllTCP(netResetPlayerMessage);
     }
 
     public void turnPlayer(String direction) {
@@ -385,6 +457,13 @@ public class Main extends ApplicationAdapter implements InputProcessor {
             }
         }
         return null;
+    }
+
+    public static int getGameWidth() {
+        return VIEWPORT_WIDTH;
+    }
+    public static int getGameHeight() {
+        return VIEWPORT_HEIGHT;
     }
 
     public ArrayList<Player> getPlayers() {
