@@ -4,7 +4,6 @@ import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.g2d.Batch;
-import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.g2d.TextureRegion;
 import com.badlogic.gdx.math.MathUtils;
 import com.badlogic.gdx.math.Vector2;
@@ -17,8 +16,8 @@ public class Player extends Actor {
     ShapeDrawer shapeDrawerBody;
     ShapeDrawer shapeDrawerHead;
     float angle;
-    private final float turnSpeed = 120f;
-    private final float movementSpeed = 140f;
+    private final static float TURN_SPEED = 120f;
+    private final static float MOVEMENT_SPEED = 140f;
 
     // When this value goes below zero, create gap in snake
     private float distanceUntilGap;
@@ -43,7 +42,7 @@ public class Player extends Actor {
     boolean isDead = false;
     Main main;
 
-    public Player(Vector2 position, float angle, SpriteBatch batch, Main main, int snakeColor, int snakeSize) {
+    public Player(Vector2 position, float angle, Main main, int snakeColor, int snakeSize) {
         setPosition(position.x, position.y);
         this.angle = angle;
         this.snakeSize = snakeSize;
@@ -82,7 +81,7 @@ public class Player extends Actor {
     }
 
     private void addSnakeBody() {
-        snakePaths.add(new Array<Vector2>());
+        snakePaths.add(new Array<>());
         addSnakePart();
     }
 
@@ -119,8 +118,7 @@ public class Player extends Actor {
         isDead = false;
         ready = false;
 
-        Gdx.app.log("reset", "hmm");
-        snakePaths = new Array<Array<Vector2>>();
+        snakePaths = new Array<>();
 
         startGap();
         stopGap();
@@ -142,20 +140,20 @@ public class Player extends Actor {
         }
         // Update rotation based and add snake parts
         if (turnRight) {
-            angle += turnSpeed * delta;
+            angle += TURN_SPEED * delta;
             if (!makingGap) {
                 addSnakePart();
             }
 
         } else if (turnLeft) {
-            angle -= turnSpeed * delta;
+            angle -= TURN_SPEED * delta;
             if (!makingGap) {
                 addSnakePart();
             }
         }
 
-        float toMoveX = movementSpeed * MathUtils.cosDeg(angle) * delta;
-        float toMoveY = movementSpeed * MathUtils.sinDeg(angle) * delta;
+        float toMoveX = MOVEMENT_SPEED * MathUtils.cosDeg(angle) * delta;
+        float toMoveY = MOVEMENT_SPEED * MathUtils.sinDeg(angle) * delta;
         float distanceMovedThisFrame = Vector2.dst(getX(), getY(),
             getX() + toMoveX, getY() + toMoveY);
 

@@ -159,11 +159,11 @@ public class Main extends ApplicationAdapter implements InputProcessor {
             server.start();
 
             // Create the servers player
-            Player p = new Player(Player.getRandomPosition(), MathUtils.random(360), batch, this, getPlayers().size(), snakeSize);
+            Player p = new Player(Player.getRandomPosition(), MathUtils.random(360), this, getPlayers().size(), snakeSize);
             stage.addActor(p);
             playerId = stage.getActors().size - 1;
             try {
-                server.bind(54555, 54777);
+                server.bind(54555);
             } catch (IOException e) {
                 throw new RuntimeException(e);
             }
@@ -303,7 +303,7 @@ public class Main extends ApplicationAdapter implements InputProcessor {
     }
 
     public void newPlayer(Vector2 startPosition, float angle) {
-        Player p = new Player(startPosition, angle, batch, this, getPlayers().size(), snakeSize);
+        Player p = new Player(startPosition, angle, this, getPlayers().size(), snakeSize);
         stage.addActor(p);
     }
 
