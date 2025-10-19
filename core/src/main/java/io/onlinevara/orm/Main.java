@@ -293,7 +293,6 @@ public class Main extends ApplicationAdapter implements InputProcessor {
         kryo.register(Vector2.class);
         kryo.register(Array.class);
         kryo.register(Object.class);
-        kryo.register(Object[].class);
         kryo.register(NetNewPlayer.class);
         kryo.register(NetSetPlayerId.class);
         kryo.register(NetTurn.class);
