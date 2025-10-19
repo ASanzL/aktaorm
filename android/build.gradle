@@ -34,8 +34,8 @@ android {
     applicationId 'io.onlinevara.orm'
     minSdkVersion 21
     targetSdkVersion 35
-    versionCode 18
-    versionName "0.1.8"
+    versionCode 20
+    versionName "0.1.10"
   }
   compileOptions {
     sourceCompatibility "8"

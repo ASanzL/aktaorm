@@ -163,7 +163,7 @@ public class Main extends ApplicationAdapter implements InputProcessor {
             stage.addActor(p);
             playerId = stage.getActors().size - 1;
             try {
-                server.bind(54555);
+                server.bind(54555,54777);
             } catch (IOException e) {
                 throw new RuntimeException(e);
             }
