@@ -129,7 +129,13 @@ public class Player extends Actor {
     }
 
     private Color getHeadColor() {
-        return ready && !isDead ? Color.WHITE : snakeColors.get(snakeColorId);
+        if (!ready && !isDead) {
+            return snakeColors.get(snakeColorId);
+        } else if (isDead) {
+            return Color.LIGHT_GRAY;
+        }
+
+        return Color.WHITE;
     }
 
     @Override
