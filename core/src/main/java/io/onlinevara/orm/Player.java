@@ -37,6 +37,8 @@ public class Player extends Actor {
 
     // Width in pixels
     int snakeSize;
+    float headSizeTarget;
+    float headSize;
 
     boolean ready = false;
     boolean isDead = false;
@@ -46,6 +48,8 @@ public class Player extends Actor {
         setPosition(position.x, position.y);
         this.angle = angle;
         this.snakeSize = snakeSize;
+        headSize = getLargeHeadSize();
+        headSizeTarget = snakeSize / 2f;
 
         resetPlayer();
 
@@ -117,6 +121,7 @@ public class Player extends Actor {
     public void resetPlayer() {
         isDead = false;
         ready = false;
+        headSize = getLargeHeadSize();
 
         snakePaths = new Array<>();
 
@@ -126,6 +131,10 @@ public class Player extends Actor {
         addSnakePart();
 
         collisionPoints.clear();
+    }
+
+    private float getLargeHeadSize() {
+        return snakeSize * 10;
     }
 
     private Color getHeadColor() {
@@ -141,6 +150,8 @@ public class Player extends Actor {
     @Override
     public void act(float delta) {
         super.act(delta);
+        headSize += (headSizeTarget - headSize) * 0.04f;
+
         if (!main.gameStarted() || isDead) {
             return;
         }
@@ -200,7 +211,7 @@ public class Player extends Actor {
             snakePaths) {
             shapeDrawerBody.path(path, snakeSize, JoinType.SMOOTH, true);
         }
-        shapeDrawerHead.filledCircle(getHeadPosition().x, getHeadPosition().y, (float) snakeSize / 2);
+        shapeDrawerHead.filledCircle(getHeadPosition().x, getHeadPosition().y, headSize);
 
         // Uncomment for collision debug
 //        for (Vector2 p :

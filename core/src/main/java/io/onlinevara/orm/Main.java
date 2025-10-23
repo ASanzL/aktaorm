@@ -235,11 +235,9 @@ public class Main extends ApplicationAdapter implements InputProcessor {
                     // Reset player message
                     if (object instanceof NetResetPlayer) {
                         NetResetPlayer response = (NetResetPlayer)object;
-                        for (int i = 0; i <= getPlayers().size() - 1; i++) {
-                            getPlayers().get(i).setX(response.playerPositions.get(i).x);
-                            getPlayers().get(i).setY(response.playerPositions.get(i).y);
-                            getPlayers().get(i).resetPlayer();
-                        }
+                        getPlayerByColorId(response.snakeColorId).setX(response.playerPosition.x);
+                        getPlayerByColorId(response.snakeColorId).setY(response.playerPosition.y);
+                        getPlayerByColorId(response.snakeColorId).resetPlayer();
                         stage.getActors().get(readyButtonStageId).setVisible(true);
                     }
                 }
@@ -293,7 +291,6 @@ public class Main extends ApplicationAdapter implements InputProcessor {
         kryo.register(Vector2.class);
         kryo.register(Array.class);
         kryo.register(Object.class);
-        kryo.register(Object[].class);
         kryo.register(NetNewPlayer.class);
         kryo.register(NetSetPlayerId.class);
         kryo.register(NetTurn.class);
@@ -421,9 +418,13 @@ public class Main extends ApplicationAdapter implements InputProcessor {
 
         stage.getActors().get(readyButtonStageId).setVisible(true);
 
-        NetResetPlayer netResetPlayerMessage = new NetResetPlayer();
-        netResetPlayerMessage.playerPositions = newPlayerPositions;
-        server.sendToAllTCP(netResetPlayerMessage);
+        for (Player p :
+            getPlayers()) {
+            NetResetPlayer netResetPlayerMessage = new NetResetPlayer();
+            netResetPlayerMessage.playerPosition = p.getHeadPosition();
+            netResetPlayerMessage.snakeColorId = p.snakeColorId;;
+            server.sendToAllTCP(netResetPlayerMessage);
+        }
     }
 
     public void turnPlayer(String direction) {
