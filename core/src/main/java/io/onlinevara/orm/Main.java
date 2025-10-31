@@ -496,6 +496,7 @@ public class Main extends ApplicationAdapter implements InputProcessor {
         if (keycode == Input.Keys.CENTER) {
             readyButton.setVisible(false);
             setPlayerReadyNet();
+            return true;
         }
         return false;
     }
