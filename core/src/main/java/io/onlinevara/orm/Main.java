@@ -148,11 +148,17 @@ public class Main extends ApplicationAdapter implements InputProcessor {
                         server.sendToAllTCP(response);
                     }
 
+                    // Handle player ready
                     if (object instanceof NetSetReady) {
                         NetSetReady response = (NetSetReady)object;
-
                         server.sendToAllTCP(response);
                         setPlayerReady(response.playerId);
+                    }
+
+                    // Handle gap on server
+                    if (object instanceof NetSetGapDistance) {
+                        NetSetGapDistance response = (NetSetGapDistance)object;
+                        requestNewGapDistance(getPlayerByColorId(response.snakeColorId));
                     }
                 }
             });
@@ -240,6 +246,17 @@ public class Main extends ApplicationAdapter implements InputProcessor {
                         getPlayerByColorId(response.snakeColorId).resetPlayer();
                         stage.getActors().get(readyButtonStageId).setVisible(true);
                     }
+
+                    // Set gap distance
+                    if (object instanceof NetSetGapDistance) {
+                        NetSetGapDistance response = (NetSetGapDistance)object;
+                        Gdx.app.log("GAP", String.valueOf(response.snakeColorId));
+                        if (getPlayerByColorId(response.snakeColorId) != null) {
+                            getPlayerByColorId(response.snakeColorId).stopGap(
+                                response.distanceGap, response.distanceStopGap
+                            );
+                        }
+                    }
                 }
 
                 @Override
@@ -255,6 +272,15 @@ public class Main extends ApplicationAdapter implements InputProcessor {
             }
         }
 
+        // Client request correct position from server every second
+        if (!isServer) {
+            Timer.schedule(new Timer.Task() {
+                @Override
+                public void run() {
+                    updatePlayerPositionFromServer();
+                }
+            }, 1);
+        }
     }
 
     public void setPlayerReadyNet() {
@@ -297,6 +323,7 @@ public class Main extends ApplicationAdapter implements InputProcessor {
         kryo.register(NetSetReady.class);
         kryo.register(NetSetPlayerDead.class);
         kryo.register(NetResetPlayer.class);
+        kryo.register(NetSetGapDistance.class);
     }
 
     public void newPlayer(Vector2 startPosition, float angle) {
@@ -332,6 +359,22 @@ public class Main extends ApplicationAdapter implements InputProcessor {
 
         stage.act(delta);
         stage.draw();
+    }
+
+    public void requestNewGapDistance(Player player) {
+        if (isServer) {
+            NetSetGapDistance setPlayerGap = new NetSetGapDistance();
+            setPlayerGap.snakeColorId = player.snakeColorId;
+            setPlayerGap.distanceGap = MathUtils.random(300, 1200);
+            setPlayerGap.distanceStopGap = MathUtils.random(30, 80);
+            server.sendToAllTCP(setPlayerGap);
+
+            player.stopGap(setPlayerGap.distanceGap, setPlayerGap.distanceStopGap);
+        } else {
+            NetSetGapDistance setPlayerGap = new NetSetGapDistance();
+            setPlayerGap.snakeColorId = player.snakeColorId;
+            client.sendTCP(setPlayerGap);
+        }
     }
 
     /**
@@ -503,7 +546,9 @@ public class Main extends ApplicationAdapter implements InputProcessor {
 
     @Override
     public boolean keyUp(int keycode) {
-        return false;
+        Player player = (Player)stage.getActors().get(playerId);
+        player.stopTurning();
+        return true;
     }
 
     @Override
@@ -527,6 +572,11 @@ public class Main extends ApplicationAdapter implements InputProcessor {
         Player player = (Player)stage.getActors().get(playerId);
         player.stopTurning();
 
+        updatePlayerPositionFromServer();
+        return false;
+    }
+
+    private void updatePlayerPositionFromServer() {
         NetTurn turnMsg = new NetTurn();
         turnMsg.playerId = playerId;
         turnMsg.realAngle = getPlayer().angle;
@@ -539,7 +589,6 @@ public class Main extends ApplicationAdapter implements InputProcessor {
         } else {
             client.sendTCP(turnMsg);
         }
-        return false;
     }
 
     @Override

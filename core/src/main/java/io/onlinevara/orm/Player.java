@@ -22,7 +22,7 @@ public class Player extends Actor {
     // When this value goes below zero, create gap in snake
     private float distanceUntilGap;
     // When this value goes below zero, stop gap
-    private float getDistanceUntilStopGap;
+    private float distanceUntilStopGap;
     private boolean makingGap = false;
 
     private boolean turnLeft = false;
@@ -45,6 +45,8 @@ public class Player extends Actor {
     Main main;
 
     public Player(Vector2 position, float angle, Main main, int snakeColor, int snakeSize) {
+        this.main = main;
+
         setPosition(position.x, position.y);
         this.angle = angle;
         this.snakeSize = snakeSize;
@@ -61,8 +63,6 @@ public class Player extends Actor {
         snakeColors.add(Color.NAVY);
 
         snakeColorId = snakeColor;
-
-        this.main = main;
     }
 
     public static Vector2 getRandomPosition() {
@@ -110,12 +110,17 @@ public class Player extends Actor {
         addSnakeBody();
     }
 
-    private void stopGap() {
+    private void requestStopGap() {
+        main.requestNewGapDistance(this);
+    }
+
+    public void stopGap(float distanceUntilGap, float distanceUntilStopGap) {
         makingGap = false;
-        distanceUntilGap = MathUtils.random(300, 1200);
-        getDistanceUntilStopGap = MathUtils.random(30, 80);
         addSnakePart();
         distanceSinceLastCollisionPoints = 0;
+
+        this.distanceUntilGap = distanceUntilGap;
+        this.distanceUntilStopGap = distanceUntilStopGap;
     }
 
     public void resetPlayer() {
@@ -126,7 +131,7 @@ public class Player extends Actor {
         snakePaths = new Array<>();
 
         startGap();
-        stopGap();
+        requestStopGap();
         addSnakePart();
         addSnakePart();
 
@@ -150,6 +155,7 @@ public class Player extends Actor {
     @Override
     public void act(float delta) {
         super.act(delta);
+        // Spawn in head animation
         headSize += (headSizeTarget - headSize) * 0.04f;
 
         if (!main.gameStarted() || isDead) {
@@ -186,9 +192,9 @@ public class Player extends Actor {
             if (!makingGap) {
                 startGap();
             }
-            getDistanceUntilStopGap -= distanceMovedThisFrame;
-            if (getDistanceUntilStopGap <= 0) {
-                stopGap();
+            distanceUntilStopGap -= distanceMovedThisFrame;
+            if (distanceUntilStopGap <= 0) {
+                requestStopGap();
             }
         }
 
